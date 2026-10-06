@@ -25,7 +25,7 @@ export default function Detail({ p, onClose, saved, onToggleSave, compare, onTog
     }
   }, [onClose])
 
-  const wa = `https://wa.me/9611000000?text=${encodeURIComponent(propertyInquiryMessage(p))}`
+  const wa = `https://wa.me/96181090757?text=${encodeURIComponent(propertyInquiryMessage(p))}`
   const similar = similarProperties(p, 3)
 
   const copyLink = async () => {
