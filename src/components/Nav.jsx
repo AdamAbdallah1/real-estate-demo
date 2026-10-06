@@ -8,12 +8,12 @@ gsap.registerPlugin(ScrollTrigger)
 const LINKS = [
   { label: 'Buy', id: 'buy-path', action: 'buy' },
   { label: 'Rent', id: 'rent-path', action: 'rent' },
-  { label: 'Sell', id: 'sell-path' },
+  { label: 'Sell', id: 'sell-path', action: 'sell' },
   { label: 'Locations', id: 'locations' },
   { label: 'About', id: 'about' },
 ]
 
-export default function Nav({ onSelectPurpose, purpose }) {
+export default function Nav({ onSelectPurpose, purpose, savedCount = 0, onOpenSaved, onOpenSell }) {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
   const [hidden, setHidden] = useState(false)
@@ -69,12 +69,17 @@ export default function Nav({ onSelectPurpose, purpose }) {
     setOpen(false)
     if (link.action === 'buy' || link.action === 'rent') onSelectPurpose(link.action)
     setTimeout(() => {
-      document.getElementById(link.action ? (link.action === 'sell' ? 'sell-path' : 'properties') : link.id)?.scrollIntoView({ behavior: 'smooth' })
+      if (link.action === 'sell') {
+        onOpenSell?.()
+      } else {
+        document.getElementById(link.action ? 'properties' : link.id)?.scrollIntoView({ behavior: 'smooth' })
+      }
     }, open ? 60 : 0)
   }
 
   return (
-    <header className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'} ${scrolled ? 'bg-ivory/90 backdrop-blur-md border-b border-line' : 'bg-transparent border-b border-transparent'}`}>
+    <>
+      <header className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'} ${scrolled ? 'bg-ivory/90 backdrop-blur-md border-b border-line' : 'bg-transparent border-b border-transparent'}`}>
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 md:px-8" aria-label="Primary">
         <a href="#top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="leading-none text-ink" aria-label="NARA Real Estate — home">
           <span className="block font-serif text-xl tracking-[0.22em]">NARA</span>
@@ -87,6 +92,9 @@ export default function Nav({ onSelectPurpose, purpose }) {
               {l.label}
             </button>
           ))}
+          <button onClick={onOpenSaved} className="text-[13px] tracking-wide text-ink-soft transition-colors hover:text-ink">
+            Saved{savedCount > 0 ? ` (${savedCount})` : ''}
+          </button>
           <a href="#contact" onClick={(e) => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }) }} className="border border-ink px-4 py-2 text-[12px] tracking-[0.14em] transition-colors hover:bg-ink hover:text-ivory">
             LET'S TALK
           </a>
@@ -96,20 +104,23 @@ export default function Nav({ onSelectPurpose, purpose }) {
           {open ? <HiX size={22} /> : <HiMenuAlt3 size={22} />}
         </button>
       </nav>
-
-      {open && (
-        <div className="fixed inset-0 top-16 z-40 flex flex-col bg-ivory px-8 pt-10" role="dialog" aria-modal="true" aria-label="Menu">
-          {LINKS.map((l) => (
-            <button key={l.label} onClick={() => go(l)} className="border-b border-line py-5 text-left font-serif text-3xl text-ink">
-              {l.label}
-            </button>
-          ))}
-          <button onClick={() => { setOpen(false); setTimeout(() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }), 60) }} className="mt-8 border border-ink py-4 text-center text-[12px] tracking-[0.2em]">
-            LET'S TALK
-          </button>
-          <p className="mt-auto pb-10 text-[11px] tracking-wide text-stone">Beirut, Lebanon</p>
-        </div>
-      )}
     </header>
+    {open && (
+      <div className="fixed inset-x-0 bottom-0 top-16 z-[55] flex flex-col bg-ivory px-8 pb-12 pt-10" role="dialog" aria-modal="true" aria-label="Menu">
+        {LINKS.map((l) => (
+          <button key={l.label} onClick={() => go(l)} className="border-b border-line py-5 text-left font-serif text-3xl text-ink">
+            {l.label}
+          </button>
+        ))}
+        <button onClick={() => { setOpen(false); onOpenSaved?.() }} className="border-b border-line py-5 text-left font-serif text-3xl text-ink">
+          Saved{savedCount > 0 ? ` (${savedCount})` : ''}
+        </button>
+        <button onClick={() => { setOpen(false); setTimeout(() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }), 60) }} className="mt-8 border border-ink py-4 text-center text-[12px] tracking-[0.2em]">
+          LET'S TALK
+        </button>
+        <p className="mt-auto pb-0 text-[11px] tracking-wide text-stone">Beirut, Lebanon</p>
+      </div>
+    )}
+    </>
   )
 }

@@ -2,11 +2,12 @@ import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { PROPERTIES, formatPrice, specLine } from '../data'
+import SaveButton from './SaveButton'
 import { prefersReduced } from '../lib/motion'
 
 gsap.registerPlugin(ScrollTrigger)
 
-export default function Latest({ onOpen }) {
+export default function Latest({ onOpen, savedIds, toggleSave, compareIds, toggleCompare, compareFull }) {
   const ref = useRef(null)
   const latest = PROPERTIES.filter((p) => p.latest)
   const [big, ...rest] = latest
@@ -42,12 +43,12 @@ export default function Latest({ onOpen }) {
       <h2 className="mt-3 font-serif text-3xl md:text-4xl" data-reveal>Latest properties</h2>
       <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-14 md:grid-cols-12">
         <div className="md:col-span-7" data-latest-item>
-          <LatestCard p={big} onOpen={onOpen} large />
+          <LatestCard p={big} onOpen={onOpen} large saved={savedIds?.includes(big.id)} onToggleSave={() => toggleSave?.(big.id)} compare={compareIds?.includes(big.id)} onToggleCompare={() => toggleCompare?.(big.id)} compareFull={compareFull?.(big.id)} />
         </div>
         <div className="flex flex-col gap-14 md:col-span-5">
           {rest.slice(0, 2).map((p) => (
             <div key={p.id} data-latest-item>
-              <LatestCard p={p} onOpen={onOpen} />
+              <LatestCard p={p} onOpen={onOpen} saved={savedIds?.includes(p.id)} onToggleSave={() => toggleSave?.(p.id)} compare={compareIds?.includes(p.id)} onToggleCompare={() => toggleCompare?.(p.id)} compareFull={compareFull?.(p.id)} />
             </div>
           ))}
         </div>
@@ -56,9 +57,14 @@ export default function Latest({ onOpen }) {
   )
 }
 
-function LatestCard({ p, onOpen, large }) {
+function LatestCard({ p, onOpen, large, saved, onToggleSave, compare, onToggleCompare, compareFull }) {
   return (
-    <article>
+    <article className="relative">
+      {onToggleSave && (
+        <span className="absolute right-2 top-2 z-10">
+          <SaveButton saved={saved} onToggle={onToggleSave} />
+        </span>
+      )}
       <button onClick={() => onOpen(p)} className="group block w-full text-left" aria-label={`View ${p.title}, ${p.city}`}>
         <div data-latest-media className={`overflow-hidden ${large ? 'aspect-[16/11]' : 'aspect-[4/3]'}`}>
           <img src={p.images[0]} alt={`${p.title} in ${p.city}`} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]" />
@@ -75,6 +81,13 @@ function LatestCard({ p, onOpen, large }) {
           </p>
         </div>
       </button>
+      {onToggleCompare && (
+        <div className="mt-2 flex justify-end">
+          <button type="button" onClick={onToggleCompare} aria-pressed={!!compare} disabled={!compare && compareFull} className={`text-[11px] tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${compare ? 'text-ink underline underline-offset-4' : 'text-stone hover:text-ink'}`}>
+            {compare ? 'COMPARING' : '+ COMPARE'}
+          </button>
+        </div>
+      )}
     </article>
   )
 }

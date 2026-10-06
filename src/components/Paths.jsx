@@ -6,7 +6,7 @@ const PATHS = [
   { id: 'sell-path', tag: 'SELL', head: 'Present your property properly and reach the right buyers.', action: 'sell' },
 ]
 
-export default function Paths({ onSelectPurpose }) {
+export default function Paths({ onSelectPurpose, onOpenSell }) {
   const [hovered, setHovered] = useState(null)
 
   return (
@@ -17,7 +17,11 @@ export default function Paths({ onSelectPurpose }) {
           id={p.id}
           onClick={() => {
             if (p.action === 'buy' || p.action === 'rent') onSelectPurpose(p.action)
-            document.getElementById(p.action === 'sell' ? 'contact' : 'properties')?.scrollIntoView({ behavior: 'smooth' })
+            if (p.action === 'sell') {
+              onOpenSell?.()
+            } else {
+              document.getElementById('properties')?.scrollIntoView({ behavior: 'smooth' })
+            }
           }}
           onMouseEnter={() => setHovered(p.id)}
           onMouseLeave={() => setHovered(null)}

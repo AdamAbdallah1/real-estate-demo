@@ -1,8 +1,14 @@
 import { formatPrice, specLine } from '../data'
+import SaveButton from './SaveButton'
 
-export default function PropertyCard({ p, onOpen, large = false }) {
+export default function PropertyCard({ p, onOpen, large = false, saved, onToggleSave, compare, onToggleCompare, compareFull }) {
   return (
-    <article>
+    <article className="relative">
+      {onToggleSave && (
+        <span className="absolute right-2 top-2 z-10">
+          <SaveButton saved={!!saved} onToggle={() => onToggleSave(p.id)} />
+        </span>
+      )}
       <button onClick={() => onOpen(p)} className="group block w-full text-left" aria-label={`View ${p.title}, ${p.city}`}>
         <div className={`overflow-hidden ${large ? 'aspect-[16/11]' : 'aspect-[4/3]'}`}>
           <img src={p.images[0]} alt={`${p.title} in ${p.city}`} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]" />
@@ -17,6 +23,20 @@ export default function PropertyCard({ p, onOpen, large = false }) {
           VIEW PROPERTY <span className="inline-block transition-transform duration-300 ease-out group-hover:translate-x-1.5">&rarr;</span>
         </p>
       </button>
+      {onToggleCompare && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => onToggleCompare(p.id)}
+            aria-pressed={!!compare}
+            disabled={!compare && compareFull}
+            title={!compare && compareFull ? 'Maximum of 3 properties' : undefined}
+            className={`text-[11px] tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${compare ? 'text-ink underline underline-offset-4' : 'text-stone hover:text-ink'}`}
+          >
+            {compare ? 'COMPARING' : '+ COMPARE'}
+          </button>
+        </div>
+      )}
     </article>
   )
 }

@@ -2,12 +2,13 @@ import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { PROPERTIES, formatPrice, specLine } from '../data'
+import SaveButton from './SaveButton'
 
 import { prefersReduced } from '../lib/motion'
 
 gsap.registerPlugin(ScrollTrigger)
 
-export default function Featured({ onOpen }) {
+export default function Featured({ onOpen, savedIds, toggleSave, compareIds, toggleCompare, compareFull }) {
   const ref = useRef(null)
   const featured = PROPERTIES.filter((p) => p.featured).slice(0, 4)
 
@@ -55,7 +56,7 @@ export default function Featured({ onOpen }) {
       <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2">
         {featured.map((p, i) => (
           <div key={p.id} className={i % 2 === 1 ? 'sm:mt-16' : ''} data-featured={i}>
-            <FeaturedCard p={p} onOpen={onOpen} />
+            <FeaturedCard p={p} onOpen={onOpen} saved={savedIds?.includes(p.id)} onToggleSave={() => toggleSave?.(p.id)} compare={compareIds?.includes(p.id)} onToggleCompare={() => toggleCompare?.(p.id)} compareFull={compareFull?.(p.id)} />
           </div>
         ))}
       </div>
@@ -63,9 +64,14 @@ export default function Featured({ onOpen }) {
   )
 }
 
-function FeaturedCard({ p, onOpen }) {
+function FeaturedCard({ p, onOpen, saved, onToggleSave, compare, onToggleCompare, compareFull }) {
   return (
-    <article>
+    <article className="relative">
+      {onToggleSave && (
+        <span className="absolute right-2 top-2 z-10">
+          <SaveButton saved={saved} onToggle={onToggleSave} />
+        </span>
+      )}
       <button onClick={() => onOpen(p)} className="group block w-full text-left" aria-label={`View ${p.title}, ${p.city}`}>
         <div data-featured-media className="aspect-[16/11] overflow-hidden">
           <img src={p.images[0]} alt={`${p.title} in ${p.city}`} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]" />
@@ -82,6 +88,13 @@ function FeaturedCard({ p, onOpen }) {
           </p>
         </div>
       </button>
+      {onToggleCompare && (
+        <div className="mt-2 flex justify-end">
+          <button type="button" onClick={onToggleCompare} aria-pressed={!!compare} disabled={!compare && compareFull} className={`text-[11px] tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${compare ? 'text-ink underline underline-offset-4' : 'text-stone hover:text-ink'}`}>
+            {compare ? 'COMPARING' : '+ COMPARE'}
+          </button>
+        </div>
+      )}
     </article>
   )
 }
