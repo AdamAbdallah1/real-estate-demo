@@ -1,53 +1,82 @@
 import { PROPERTIES } from '../data'
+import { getWhatsAppNumber } from './settingsStore'
+import { getLocale, tr } from '../i18n/locale.js'
+import { geoLabel, resolveText } from '../i18n/translations.js'
 
+/** Kept for backwards compatibility — the live value comes from siteSettings. */
 export const WHATSAPP_NUMBER = '9611000000'
 
-export function openWhatsApp(message) {
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
+export function whatsappNumber() {
+  return getWhatsAppNumber()
 }
 
-export function propertyInquiryMessage(p) {
-  return `Hello NARA, I'm interested in the ${p.title} in ${p.city} listed at ${formatPriceForMessage(p)}. I'd like to know more about the property and its availability.`
+export function openWhatsApp(message, number = getWhatsAppNumber()) {
+  window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
+}
+
+/** Text of a property field in the active language (messages run outside React). */
+function field(value, lang) {
+  return resolveText(value, lang)
 }
 
 function formatPriceForMessage(p) {
   const n = '$' + p.price.toLocaleString('en-US')
-  return p.perMonth ? n + ' per month' : n
+  return p.perMonth ? `${n} ${tr('wa.perMonth')}` : n
+}
+
+/** Property-aware WhatsApp message, written in the currently selected language. */
+export function propertyInquiryMessage(p) {
+  const lang = getLocale()
+  return tr('wa.inquiry', {
+    title: field(p.title, lang),
+    city: geoLabel(p.city, lang),
+    price: formatPriceForMessage(p),
+  })
 }
 
 export function viewingRequestMessage(p, { name, phone, day, time, message }) {
+  const lang = getLocale()
   const lines = [
-    `Hello NARA, I'd like to request a viewing for the ${p.title} in ${p.city} listed at ${formatPriceForMessage(p)}.`,
-    ``,
-    `Name: ${name}`,
-    `Phone / WhatsApp: ${phone}`,
-    `Preferred day: ${day}`,
-    `Preferred time: ${time}`,
+    tr('wa.viewingHeader', {
+      title: field(p.title, lang),
+      city: geoLabel(p.city, lang),
+      price: formatPriceForMessage(p),
+    }),
+    '',
+    `${tr('wa.name')}: ${name}`,
+    `${tr('wa.phone')}: ${phone}`,
+    `${tr('wa.day')}: ${day}`,
+    `${tr('wa.time')}: ${time}`,
   ]
-  if (message?.trim()) lines.push(`Message: ${message.trim()}`)
+  if (message?.trim()) lines.push(`${tr('wa.message')}: ${message.trim()}`)
   return lines.join('\n')
 }
 
 export function shareMessage(p, url) {
-  return `${p.title} in ${p.city} — ${formatPriceForMessage(p)} via NARA Real Estate\n${url}`
+  const lang = getLocale()
+  return `${tr('wa.share', {
+    title: field(p.title, lang),
+    city: geoLabel(p.city, lang),
+    price: formatPriceForMessage(p),
+  })}\n${url}`
 }
 
 export function sellerInquiryMessage({ name, phone, location, type, size, message }) {
   const lines = [
-    `Hello NARA, I'd like to discuss selling a property.`,
-    ``,
-    `Name: ${name}`,
-    `Phone / WhatsApp: ${phone}`,
-    `Location: ${location}`,
-    `Type: ${type}`,
-    `Approximate size: ${size}`,
+    tr('wa.sellerHeader'),
+    '',
+    `${tr('wa.name')}: ${name}`,
+    `${tr('wa.phone')}: ${phone}`,
+    `${tr('wa.location')}: ${location}`,
+    `${tr('wa.type')}: ${type}`,
+    `${tr('wa.size')}: ${size}`,
   ]
-  if (message?.trim()) lines.push(`Message: ${message.trim()}`)
+  if (message?.trim()) lines.push(`${tr('wa.message')}: ${message.trim()}`)
   return lines.join('\n')
 }
 
-export function similarProperties(p, count = 3) {
-  return PROPERTIES
+export function similarProperties(p, count = 3, list = PROPERTIES) {
+  return (list || PROPERTIES)
     .filter((x) => x.id !== p.id)
     .map((x) => ({
       x,
@@ -67,6 +96,10 @@ export function similarProperties(p, count = 3) {
     })
 }
 
+/**
+ * Sort ids are language-independent filter state (they live in the query
+ * string), so only their labels are translated — at render time.
+ */
 export const SORTS = [
   { id: 'recommended', label: 'Recommended' },
   { id: 'price-asc', label: 'Price: Low to high' },
@@ -91,10 +124,17 @@ export function sortProperties(list, sort) {
   }
 }
 
+/**
+ * Search across BOTH language representations.
+ * `keywords` is prebuilt by resolvePropertyView (title, description, features,
+ * location labels in English and Arabic); the field list is the fallback for
+ * property objects that never went through the resolver.
+ */
 export function matchesQuery(p, q) {
   if (!q) return true
-  const haystack = [p.title, p.type, p.city, p.regionLabel, p.region, p.view, ...(p.features || [])]
-    .join(' ')
+  const haystack = (p.keywords
+    || [p.title, p.type, p.city, p.regionLabel, p.region, p.view, ...(p.features || [])].join(' ')
+  )
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -102,8 +142,13 @@ export function matchesQuery(p, q) {
   return haystack.includes(needle)
 }
 
+/**
+ * Canonical property URL for the current language.
+ * English  https://host/?property=p1
+ * Arabic   https://host/ar?property=p1
+ */
 export function propertyUrl(p) {
   const url = new URL(window.location.href)
-  url.searchParams.set('property', p.id)
+  url.searchParams.set('property', p?.id || '')
   return url.toString()
 }

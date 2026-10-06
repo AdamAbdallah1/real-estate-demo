@@ -3,6 +3,10 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-ar: "IBM Plex Sans Arabic", "Noto Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  /* Latin-only fragments (wordmark, EN) keep their own type in Arabic mode. */
+  --font-sans-latin: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif-latin: "Fraunces", Georgia, "Times New Roman", serif;
 
   --color-ivory: #f7f4ee;
   --color-paper: #fbf9f5;
@@ -50,8 +54,159 @@ select {
   padding-right: 1.25rem;
 }
 
+[dir='rtl'] select {
+  background-position: left 0.25rem center;
+  padding-right: 0;
+  padding-left: 1.25rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Arabic typography                                                   *
+ *                                                                     *
+ * Arabic needs a different rhythm from Latin: no letter-spacing        *
+ * (connected letterforms must never be tracked out), a taller line     *
+ * box, and a font that carries both the display and text roles so the *
+ * brand reads as one thing in both languages.                         *
+ * ------------------------------------------------------------------ */
+html[lang='ar'] {
+  --font-sans: "IBM Plex Sans Arabic", "Noto Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Latin-only fragments (wordmark, EN) keep their tracking — everything else
+   in an Arabic document must not be letter-spaced. */
+html[lang='ar'] body,
+html[lang='ar'] body *:not([lang='en']) {
+  letter-spacing: normal;
+}
+
+html[lang='ar'] body {
+  line-height: 1.8;
+  word-spacing: 0.02em;
+}
+
+html[lang='ar'] h1,
+html[lang='ar'] h2,
+html[lang='ar'] h3,
+html[lang='ar'] h4 {
+  line-height: 1.5;
+}
+
+html[lang='ar'] p,
+html[lang='ar'] li,
+html[lang='ar'] dd,
+html[lang='ar'] option {
+  line-height: 1.9;
+}
+
+/* Arabic display text runs a touch smaller to hold the same measure. */
+html[lang='ar'] .font-serif {
+  font-weight: 500;
+}
+
+/* Fragments explicitly marked English (wordmark, EN half of the toggle) keep
+   the Latin typefaces instead of inheriting the Arabic stack. */
+html[lang='ar'] [lang='en'] {
+  font-family: var(--font-sans-latin);
+}
+
+html[lang='ar'] [lang='en'].font-serif,
+html[lang='ar'] [lang='en'] .font-serif {
+  font-family: var(--font-serif-latin);
+}
+
+/* Arabic copy that sits inside an otherwise English document — the CMS
+   bilingual fields and the EN / العربية toggle. It inherits the Arabic font
+   and is never letter-spaced, whatever utilities the surrounding block uses. */
+[lang='ar'] {
+  font-family: var(--font-ar);
+  letter-spacing: normal;
+  word-spacing: 0.02em;
+}
+
+[lang='ar'] *:not([lang='en']) {
+  letter-spacing: normal;
+}
+
+[lang='ar'] h1,
+[lang='ar'] h2,
+[lang='ar'] h3,
+[lang='ar'] h4 {
+  line-height: 1.5;
+}
+
+[lang='ar'] p,
+[lang='ar'] li,
+[lang='ar'] dd,
+[lang='ar'] option {
+  line-height: 1.9;
+}
+
+/* ------------------------------------------------------------------ *
+ * Directional marks (→) follow the reading direction and keep their   *
+ * hover motion. One rule instead of rtl: variants in every component. *
+ * ------------------------------------------------------------------ */
+.arrow-mark {
+  display: inline-block;
+  transition: transform 0.3s ease-out, color 0.3s ease-out;
+}
+
+.group:hover .arrow-mark,
+.group:focus-visible .arrow-mark {
+  transform: translateX(6px);
+}
+
+[dir='rtl'] .arrow-mark {
+  transform: scaleX(-1);
+}
+
+[dir='rtl'] .group:hover .arrow-mark,
+[dir='rtl'] .group:focus-visible .arrow-mark {
+  transform: translateX(-6px) scaleX(-1);
+}
+
+/* Text that nudges on hover moves the way the reader is reading. */
+.group:hover .nudge,
+.group:focus-visible .nudge {
+  transform: translateX(var(--nudge, 6px));
+}
+
+[dir='rtl'] .group:hover .nudge,
+[dir='rtl'] .group:focus-visible .nudge {
+  transform: translateX(calc(var(--nudge, 6px) * -1));
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Touch targets on phones                                            *
+ *                                                                     *
+ * The purpose tabs, the card save/compare controls and the location  *
+ * CTA are the smallest controls in the design (17–23px tall). On a   *
+ * phone they must clear the WCAG 2.5.8 24px minimum, but on desktop   *
+ * they are mouse targets and the tighter rhythm is intentional — so   *
+ * the lift is applied only below the tablet breakpoint.               *
+ * ------------------------------------------------------------------ */
+@media (max-width: 767px) {
+  button[class*='tracking-[0.14em]'],
+  button[class*='tracking-[0.2em]'],
+  button[class*='tracking-[0.25em]'] {
+    min-height: 24px;
+  }
+
+  /* The compare tray's remove control is a bare 14px icon. An expanded
+     pseudo-element gives it a 26px hit area without touching layout. */
+  .tray-x {
+    position: relative;
+  }
+
+  .tray-x::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
   }
 }

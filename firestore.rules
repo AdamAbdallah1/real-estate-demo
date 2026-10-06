@@ -1,0 +1,348 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    //
+    // Note: Firestore rules have no element-wise list predicate (no map /
+    // filter / forAll), so image entries are validated by unrolling the index
+    // against a size cap. Every helper below was verified against the
+    // Firestore emulator by scripts/rules.test.mjs.
+    // ---------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Admin membership is a document in admins/{uid} with active == true.
+    // The client can only READ its own record — never create one, never change
+    // its role. No escalation path exists in this file.
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('active', false) == true;
+    }
+
+    function isHttps(value) {
+      return value is string && value.matches('^https://.+');
+    }
+
+    // One image entry at position `i`, guarded by the list size so a short
+    // list never evaluates an out-of-range index.
+    function imageAt(images, i) {
+      return images.size() <= i
+        || (images[i] is map
+            && images[i].keys().hasAll(['url', 'alt', 'order'])
+            && images[i].keys().hasOnly(['url', 'alt', 'order'])
+            && isHttps(images[i].url)
+            && images[i].alt is string
+            && images[i].order is int);
+    }
+
+    // Max 10 gallery images; every position is checked explicitly.
+    function validImages(images) {
+      return images is list
+        && images.size() <= 10
+        && imageAt(images, 0)
+        && imageAt(images, 1)
+        && imageAt(images, 2)
+        && imageAt(images, 3)
+        && imageAt(images, 4)
+        && imageAt(images, 5)
+        && imageAt(images, 6)
+        && imageAt(images, 7)
+        && imageAt(images, 8)
+        && imageAt(images, 9);
+    }
+
+    function validCover(cover) {
+      return cover == null
+        || (cover is map
+            && cover.keys().hasAll(['url', 'alt'])
+            && cover.keys().hasOnly(['url', 'alt'])
+            && isHttps(cover.url)
+            && cover.alt is string);
+    }
+
+    // ---------------------------------------------------------------------
+    // Bilingual (translatable) text
+    //
+    // Stored either as a plain string — an English-only document, which is how
+    // every property looked before localisation — or as an {en, ar} map with
+    // BOTH keys present, so each language can be checked without an `in` test.
+    // `min` is 1 for fields that need copy in at least one language and 0 for
+    // fields that may stay empty.
+    // ---------------------------------------------------------------------
+    function localized(v, max, min) {
+      return (v is string && v.size() >= min && v.size() <= max)
+        || (v is map
+            && v.keys().hasOnly(['en', 'ar'])
+            && v.en is string && v.en.size() <= max
+            && v.ar is string && v.ar.size() <= max
+            && (v.en.size() + v.ar.size()) >= min);
+    }
+
+    // Features: an English-only list (the pre-localisation shape) or the
+    // parallel bilingual { en: [...], ar: [...] } form. Both are plain string
+    // lists, so `join` gives a sound type + size check in a handful of
+    // expressions — per-entry unrolling would blow the rules expression budget
+    // at the 40-item cap (verified: the emulator allows 1000 per evaluation).
+    function validFeatures(features) {
+      return (features is list
+              && features.size() <= 40
+              && (features.size() == 0 || features.join(' ').size() <= 3000))
+        || (features is map
+            && features.keys().hasOnly(['en', 'ar'])
+            && features.en is list && features.en.size() <= 40
+            && (features.en.size() == 0 || features.en.join(' ').size() <= 3000)
+            && features.ar is list && features.ar.size() <= 40
+            && (features.ar.size() == 0 || features.ar.join(' ').size() <= 3000));
+    }
+
+    function propertyKeys() {
+      return ['title', 'slug', 'purpose', 'status', 'propertyType', 'regionLabel', 'location',
+              'price', 'currency', 'area', 'bedrooms', 'bathrooms', 'parking', 'floor', 'view',
+              'shortDescription', 'description', 'features', 'images', 'coverImage', 'featured',
+              'createdAt', 'updatedAt', 'publishedAt', 'createdBy', 'updatedBy', 'source'];
+    }
+
+    function validProperty(d) {
+      return d.keys().size() <= 28
+        && localized(d.title, 120, 1)
+        && d.slug is string && d.slug.matches('^[a-z0-9-]{1,90}$')
+        && d.purpose in ['sale', 'rent']
+        && d.status in ['draft', 'published', 'archived']
+        && d.propertyType is string && d.propertyType.size() > 0 && d.propertyType.size() <= 60
+        && d.location is map
+        && d.location.keys().hasAll(['city', 'district', 'region', 'address'])
+        && d.location.keys().hasOnly(['city', 'district', 'region', 'address'])
+        && d.location.city is string && d.location.city.size() > 0 && d.location.city.size() <= 120
+        && d.location.region is string && d.location.region.size() <= 40
+        && localized(d.location.address, 200, 0)
+        && d.price is number && d.price >= 0 && d.price <= 1000000000
+        && d.currency is string && d.currency.size() <= 8
+        && d.area is number && d.area >= 0
+        && d.bedrooms is number && d.bedrooms >= 0 && d.bedrooms <= 200
+        && d.bathrooms is number && d.bathrooms >= 0 && d.bathrooms <= 200
+        && d.parking is number && d.parking >= 0 && d.parking <= 200
+        && validFeatures(d.features)
+        && validImages(d.images)
+        && validCover(d.coverImage)
+        && d.featured is bool
+        && localized(d.shortDescription, 400, 0)
+        && localized(d.description, 20000, 0)
+        && d.createdAt == request.time
+        && d.updatedAt == request.time
+        && (d.publishedAt == null || d.publishedAt == request.time)
+        && d.createdBy == request.auth.uid
+        && d.updatedBy == request.auth.uid;
+    }
+
+    function validPropertyUpdate(d) {
+      return d.keys().size() <= 28
+        && localized(d.title, 120, 1)
+        && d.slug is string && d.slug.matches('^[a-z0-9-]{1,90}$')
+        && d.purpose in ['sale', 'rent']
+        && d.status in ['draft', 'published', 'archived']
+        && d.propertyType is string && d.propertyType.size() > 0 && d.propertyType.size() <= 60
+        && d.location is map
+        && d.location.keys().hasAll(['city', 'district', 'region', 'address'])
+        && d.location.keys().hasOnly(['city', 'district', 'region', 'address'])
+        && d.location.city is string && d.location.city.size() > 0 && d.location.city.size() <= 120
+        && d.location.region is string && d.location.region.size() <= 40
+        && localized(d.location.address, 200, 0)
+        && d.price is number && d.price >= 0 && d.price <= 1000000000
+        && d.currency is string && d.currency.size() <= 8
+        && d.area is number && d.area >= 0
+        && d.bedrooms is number && d.bedrooms >= 0 && d.bedrooms <= 200
+        && d.bathrooms is number && d.bathrooms >= 0 && d.bathrooms <= 200
+        && d.parking is number && d.parking >= 0 && d.parking <= 200
+        && validFeatures(d.features)
+        && validImages(d.images)
+        && validCover(d.coverImage)
+        && d.featured is bool
+        && localized(d.shortDescription, 400, 0)
+        && localized(d.description, 20000, 0)
+        && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid
+        && (d.publishedAt == null
+            || d.publishedAt == request.time
+            || d.publishedAt == resource.data.publishedAt);
+    }
+
+    function crmStatusPatch(statuses) {
+      return request.resource.data.status in statuses
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------------
+    // admins/{uid} — authorization records (console / Admin SDK only)
+    // ---------------------------------------------------------------------
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // properties/{propertyId}
+    // ---------------------------------------------------------------------
+    match /properties/{propertyId} {
+      // Public visitors only ever see published documents — a query is
+      // provable because it filters on status == 'published'.
+      allow read: if isAdmin() || resource.data.status == 'published';
+
+      allow create: if isAdmin() && validProperty(request.resource.data);
+
+      allow update: if isAdmin()
+        && validPropertyUpdate(request.resource.data)
+        && resource.data.diff(request.resource.data).affectedKeys().hasOnly(propertyKeys());
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // Public write surfaces — brand-new records, fixed status, no admin fields.
+    // ---------------------------------------------------------------------
+    match /inquiries/{inquiryId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && crmStatusPatch(['new', 'contacted', 'closed']);
+      allow delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys()
+          .hasOnly(['name', 'email', 'phone', 'message', 'source', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 200
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 2000
+        && request.resource.data.source is string
+        && request.resource.data.source.size() <= 40
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /viewingRequests/{requestId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && crmStatusPatch(['new', 'contacted', 'scheduled', 'completed', 'closed']);
+      allow delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys()
+          .hasOnly(['propertyId', 'propertyTitle', 'name', 'phone', 'preferredDay',
+                    'preferredTime', 'message', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0
+        && request.resource.data.propertyTitle is string
+        && request.resource.data.propertyTitle.size() <= 200
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.phone.matches('^[+]?[0-9 ()-]{6,40}$')
+        && request.resource.data.preferredDay is string
+        && request.resource.data.preferredDay.size() <= 40
+        && request.resource.data.preferredTime is string
+        && request.resource.data.preferredTime.size() <= 40
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /sellerLeads/{leadId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && crmStatusPatch(['new', 'contacted', 'qualified', 'closed']);
+      allow delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys()
+          .hasOnly(['name', 'phone', 'email', 'propertyLocation', 'propertyType',
+                    'message', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.phone.matches('^[+]?[0-9 ()-]{6,40}$')
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 200
+        && request.resource.data.propertyLocation is string
+        && request.resource.data.propertyLocation.size() > 0
+        && request.resource.data.propertyLocation.size() <= 200
+        && request.resource.data.propertyType is string
+        && request.resource.data.propertyType.size() <= 60
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 2000
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // ---------------------------------------------------------------------
+    // editorial — management only until public article pages exist
+    // ---------------------------------------------------------------------
+    match /editorial/{articleId} {
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys()
+             .hasOnly(['title', 'slug', 'excerpt', 'content', 'seoTitle', 'seoDescription',
+                       'coverImage', 'status',
+                       'createdAt', 'updatedAt', 'publishedAt', 'createdBy', 'updatedBy'])
+        && localized(request.resource.data.title, 160, 1)
+        && request.resource.data.slug is string
+        && request.resource.data.slug.matches('^[a-z0-9-]{1,90}$')
+        && localized(request.resource.data.excerpt, 600, 0)
+        && localized(request.resource.data.content, 100000, 0)
+        && localized(request.resource.data.get('seoTitle', ''), 160, 0)
+        && localized(request.resource.data.get('seoDescription', ''), 600, 0)
+        && request.resource.data.status in ['draft', 'published', 'archived']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && (request.resource.data.publishedAt == null || request.resource.data.publishedAt == request.time);
+      allow update: if isAdmin()
+        && request.resource.data.keys()
+             .hasOnly(['title', 'slug', 'excerpt', 'content', 'seoTitle', 'seoDescription',
+                       'coverImage', 'status',
+                       'createdAt', 'updatedAt', 'publishedAt', 'createdBy', 'updatedBy'])
+        && localized(request.resource.data.title, 160, 1)
+        && request.resource.data.slug is string
+        && request.resource.data.slug.matches('^[a-z0-9-]{1,90}$')
+        && localized(request.resource.data.excerpt, 600, 0)
+        && localized(request.resource.data.content, 100000, 0)
+        && localized(request.resource.data.get('seoTitle', ''), 160, 0)
+        && localized(request.resource.data.get('seoDescription', ''), 600, 0)
+        && request.resource.data.status in ['draft', 'published', 'archived']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------------
+    // siteSettings — public read (hero/contact/social/SEO are public content),
+    // admin-only write.
+    // ---------------------------------------------------------------------
+    match /siteSettings/{section} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && section in ['general', 'contact', 'social', 'homepage', 'seo']
+        && request.resource.data.keys().hasOnly([
+             'siteName', 'tagline', 'defaultCurrency',
+             'whatsapp', 'phone', 'email', 'address',
+             'instagram', 'facebook', 'linkedin',
+             'heroHeading', 'heroDescription', 'featuredPropertyIds', 'editorialPropertyId',
+             'title', 'description', 'ogImage',
+             'updatedAt', 'updatedBy'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    // Anything not matched above is denied by default.
+  }
+}

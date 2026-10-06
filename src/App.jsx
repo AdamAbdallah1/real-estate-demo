@@ -16,9 +16,14 @@ import Detail from './components/Detail'
 import SavedView from './components/SavedView'
 import SellModal from './components/SellModal'
 import CompareTray from './components/CompareTray'
-import { PROPERTIES } from './data'
 import { readStorage, writeStorage } from './hooks/useLocalStorage'
+import { useProperties } from './hooks/useProperties'
+import { useSiteSettings } from './hooks/useSiteSettings'
 import { prefersReduced } from './lib/motion'
+import { clearStructuredData, applyPropertySchema, applySeo, applyLanguageAlternates } from './lib/seo'
+import { propertyUrl } from './lib/properties'
+import { useI18n } from './i18n'
+import { resolveText } from './i18n/translations'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -46,15 +51,24 @@ export default function App() {
   const [filters, setFilters] = useState(initialState.filters)
   const [sort, setSort] = useState(initialState.sort)
   const [q, setQ] = useState(initialState.q)
-  const [selected, setSelected] = useState(
-    initialState.propertyId ? PROPERTIES.find((p) => p.id === initialState.propertyId) || null : null,
-  )
+  // The id (not the object) is authoritative so deep links survive the
+  // asynchronous Firestore read.
+  const [selectedId, setSelectedId] = useState(initialState.propertyId)
   const [savedOpen, setSavedOpen] = useState(false)
   const [sellOpen, setSellOpen] = useState(false)
   const [savedIds, setSavedIds] = useState(() => readStorage('nara:saved', []))
   const [recentIds, setRecentIds] = useState(() => readStorage('nara:recent', []))
   const [compareIds, setCompareIds] = useState(() => readStorage('nara:compare', []))
   const pushedRef = useRef(false)
+
+  const { properties } = useProperties()
+  const settings = useSiteSettings()
+  const { lang, t } = useI18n()
+
+  const selected = useMemo(
+    () => (selectedId ? properties.find((p) => p.id === selectedId) || null : null),
+    [selectedId, properties],
+  )
 
   useEffect(() => { writeStorage('nara:saved', savedIds) }, [savedIds])
   useEffect(() => { writeStorage('nara:recent', recentIds) }, [recentIds])
@@ -71,10 +85,12 @@ export default function App() {
     if (filters.price !== 'Any') params.set('price', filters.price)
     if (sort !== 'recommended') params.set('sort', sort)
     if (q) params.set('q', q)
-    if (selected) params.set('property', selected.id)
+    if (selectedId) params.set('property', selectedId)
     const search = params.toString()
-    window.history.replaceState(null, '', search ? `?${search}` : window.location.pathname)
-  }, [filters, sort, q, selected])
+    // Preserve any history state installed by the router (React Router reads it
+    // back on popstate) — only the URL query changes here.
+    window.history.replaceState(window.history.state, '', search ? `?${search}` : window.location.pathname)
+  }, [filters, sort, q, selectedId])
 
   useEffect(() => {
     const onPop = () => {
@@ -82,15 +98,40 @@ export default function App() {
       setFilters(s.filters)
       setSort(s.sort)
       setQ(s.q)
-      setSelected(s.propertyId ? PROPERTIES.find((p) => p.id === s.propertyId) || null : null)
+      setSelectedId(s.propertyId)
       pushedRef.current = false
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // Document metadata — property pages get their own title/description/OG tags
+  // and JSON-LD; the home state falls back to CMS SEO defaults. Everything is
+  // resolved for the active language, and hreflang alternates point at the
+  // other language's URL for the same document.
   useEffect(() => {
-    if (prefersReduced()) return
+    if (selected) {
+      applySeo({
+        title: t('seo.propertyTitle', { title: selected.title, city: selected.city }),
+        description: selected.shortDescription || String(selected.description || '').slice(0, 155),
+        image: selected.coverImage || selected.images[0] || '',
+        canonical: propertyUrl(selected),
+      })
+      applyPropertySchema(selected, propertyUrl(selected))
+    } else {
+      applySeo({
+        title: resolveText(settings.seo.title, lang) || t('seo.defaultTitle'),
+        description: resolveText(settings.seo.description, lang) || t('seo.defaultDescription'),
+        image: settings.seo.ogImage,
+        canonical: window.location.origin + window.location.pathname,
+      })
+      clearStructuredData()
+    }
+    applyLanguageAlternates(window.location.pathname)
+  }, [selected, settings, lang, t])
+
+  useEffect(() => {
+    if (prefersReduced()) return undefined
     const els = gsap.utils.toArray('[data-reveal]')
     els.forEach((el) => {
       gsap.fromTo(el, { y: 28, opacity: 0 }, {
@@ -114,17 +155,17 @@ export default function App() {
 
   const openDetail = useCallback((p) => {
     setRecentIds((ids) => [p.id, ...ids.filter((id) => id !== p.id)].slice(0, 5))
-    setSelected(p)
+    setSelectedId(p.id)
     setSavedOpen(false)
     const params = new URLSearchParams(window.location.search)
     params.set('property', p.id)
-    window.history.pushState(null, '', `?${params.toString()}`)
+    window.history.pushState(window.history.state, '', `?${params.toString()}`)
     pushedRef.current = true
     window.scrollTo(0, 0)
   }, [])
 
   const closeDetail = useCallback(() => {
-    setSelected(null)
+    setSelectedId(null)
     if (pushedRef.current) {
       pushedRef.current = false
       window.history.back()
@@ -144,15 +185,16 @@ export default function App() {
   }, [])
 
   const compareFull = (id) => compareIds.length >= 3 && !compareIds.includes(id)
-  const savedProperties = useMemo(() => savedIds.map((id) => PROPERTIES.find((p) => p.id === id)).filter(Boolean), [savedIds])
-  const recentProperties = useMemo(() => recentIds.map((id) => PROPERTIES.find((p) => p.id === id)).filter(Boolean), [recentIds])
-  const compareOnes = useMemo(() => compareIds.map((id) => PROPERTIES.find((p) => p.id === id)).filter(Boolean), [compareIds])
+  const savedProperties = useMemo(() => savedIds.map((id) => properties.find((p) => p.id === id)).filter(Boolean), [savedIds, properties])
+  const recentProperties = useMemo(() => recentIds.map((id) => properties.find((p) => p.id === id)).filter(Boolean), [recentIds, properties])
+  const compareOnes = useMemo(() => compareIds.map((id) => properties.find((p) => p.id === id)).filter(Boolean), [compareIds, properties])
 
   return (
     <main>
       <Nav onSelectPurpose={selectPurpose} purpose={filters.purpose} savedCount={savedIds.length} onOpenSaved={() => setSavedOpen(true)} onOpenSell={() => setSellOpen(true)} />
-      <Hero filters={filters} setFilters={setFilters} />
+      <Hero filters={filters} setFilters={setFilters} content={settings.homepage} />
       <Results
+        properties={properties}
         filters={filters}
         setFilters={setFilters}
         sort={sort}
@@ -167,19 +209,34 @@ export default function App() {
         compareFull={compareFull}
         recentProperties={recentProperties}
       />
-      <Featured onOpen={openDetail} savedIds={savedIds} toggleSave={toggleSave} compareIds={compareIds} toggleCompare={toggleCompare} compareFull={compareFull} />
+      <Featured
+        properties={properties}
+        featuredIds={settings.homepage.featuredPropertyIds}
+        onOpen={openDetail}
+        savedIds={savedIds}
+        toggleSave={toggleSave}
+        compareIds={compareIds}
+        toggleCompare={toggleCompare}
+        compareFull={compareFull}
+      />
       <Locations onFilterRegion={filterRegion} />
       <Paths onSelectPurpose={selectPurpose} onOpenSell={() => setSellOpen(true)} />
-      <Editorial onFilterRegion={filterRegion} />
+      <Editorial
+        properties={properties}
+        editorialPropertyId={settings.homepage.editorialPropertyId}
+        onFilterRegion={filterRegion}
+        onOpen={openDetail}
+      />
       <About />
-      <Latest onOpen={openDetail} savedIds={savedIds} toggleSave={toggleSave} compareIds={compareIds} toggleCompare={toggleCompare} compareFull={compareFull} />
-      <Contact />
-      <Footer />
+      <Latest properties={properties} onOpen={openDetail} savedIds={savedIds} toggleSave={toggleSave} compareIds={compareIds} toggleCompare={toggleCompare} compareFull={compareFull} />
+      <Contact contact={settings.contact} />
+      <Footer contact={settings.contact} social={settings.social} />
 
       {selected && (
         <Detail
           key={selected.id}
           p={selected}
+          properties={properties}
           onClose={closeDetail}
           saved={savedIds.includes(selected.id)}
           onToggleSave={() => toggleSave(selected.id)}

@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
 import { HiX } from 'react-icons/hi'
 import { sellerInquiryMessage, openWhatsApp } from '../lib/properties'
+import { useI18n } from '../i18n'
+import { typeLabel } from '../i18n/translations'
 
 const TYPES = ['Apartment', 'Villa', 'Penthouse', 'Chalet', 'Office', 'Land', 'Commercial']
 
 export default function SellModal({ onClose }) {
+  const { t, lang } = useI18n()
+
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     const onKey = (e) => e.key === 'Escape' && onClose()
@@ -15,64 +19,85 @@ export default function SellModal({ onClose }) {
     }
   }, [onClose])
 
-  const [values, setValues] = useState({ name: '', phone: '', location: '', type: 'Apartment', size: '', message: '' })
+  const [values, setValues] = useState({ name: '', phone: '', email: '', location: '', type: 'Apartment', size: '', message: '' })
   const [errors, setErrors] = useState({})
+  const [sending, setSending] = useState(false)
 
   const set = (k) => (e) => setValues({ ...values, [k]: e.target.value })
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     const errs = {}
-    if (!values.name.trim()) errs.name = 'Please enter your name.'
-    if (!/^\+?[0-9 ()-]{6,}$/.test(values.phone.trim())) errs.phone = 'Enter a valid phone / WhatsApp number.'
-    if (!values.location.trim()) errs.location = 'Please enter the property location.'
-    if (!values.size.trim()) errs.size = 'Approximate size in m².'
+    if (!values.name.trim()) errs.name = t('sell.errName')
+    if (!/^\+?[0-9 ()-]{6,}$/.test(values.phone.trim())) errs.phone = t('sell.errPhone')
+    if (!values.location.trim()) errs.location = t('sell.errLocation')
+    if (!values.size.trim()) errs.size = t('sell.errSize')
+    if (values.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) errs.email = t('sell.errEmail')
     setErrors(errs)
     if (Object.keys(errs).length) return
+
+    setSending(true)
+    try {
+      const { createSellerLead } = await import('../lib/firestore/sellerLeads')
+      await createSellerLead({
+        name: values.name,
+        phone: values.phone,
+        email: values.email,
+        propertyLocation: values.location,
+        propertyType: values.type,
+        message: [values.message, values.size ? `${t('sell.size')}: ${values.size}` : ''].filter(Boolean).join('\n'),
+      })
+    } catch (err) {
+      console.warn('[nara] seller lead not stored:', err?.code || err?.message || err)
+    }
+    setSending(false)
     openWhatsApp(sellerInquiryMessage(values))
     onClose()
   }
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-ivory" role="dialog" aria-modal="true" aria-label="Sell your property">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-ivory" role="dialog" aria-modal="true" aria-label={t('sell.aria')}>
       <div className="mx-auto max-w-2xl px-5 py-10 md:px-8">
         <div className="flex items-start justify-between">
-          <p className="text-[11px] tracking-[0.4em] text-stone">SELL</p>
-          <button onClick={onClose} aria-label="Close sell form" className="p-2 -mr-2 text-ink"><HiX size={22} /></button>
+          <p className="text-[11px] tracking-[0.4em] text-stone">{t('sell.eyebrow')}</p>
+          <button onClick={onClose} aria-label={t('sell.close')} className="p-2 -me-2 text-ink"><HiX size={22} /></button>
         </div>
-        <h2 className="mt-6 font-serif text-3xl md:text-4xl">Present your property properly</h2>
+        <h2 className="mt-6 font-serif text-3xl md:text-4xl">{t('sell.title')}</h2>
         <p className="mt-4 text-[14px] leading-relaxed text-ink-soft">
-          Tell us about the property and we'll follow up to discuss presentation and pricing.
+          {t('sell.body')}
         </p>
 
         <form onSubmit={submit} noValidate className="mt-10 space-y-6">
-          <Field label="Name" error={errors.name}>
+          <Field label={t('sell.name')} error={errors.name}>
             <input value={values.name} onChange={set('name')} type="text" autoComplete="name" className="w-full border-b border-line bg-transparent pb-2 text-[14px] focus:border-ink focus:outline-none" />
           </Field>
-          <Field label="Phone / WhatsApp" error={errors.phone}>
+          <Field label={t('sell.phone')} error={errors.phone}>
             <input value={values.phone} onChange={set('phone')} type="tel" autoComplete="tel" className="w-full border-b border-line bg-transparent pb-2 text-[14px] focus:border-ink focus:outline-none" />
           </Field>
-          <Field label="Property location" error={errors.location}>
-            <input value={values.location} onChange={set('location')} type="text" placeholder="e.g. Achrafieh, Beirut" className="w-full border-b border-line bg-transparent pb-2 text-[14px] placeholder:text-stone/60 focus:border-ink focus:outline-none" />
+          <Field label={t('sell.email')} error={errors.email}>
+            <input value={values.email} onChange={set('email')} type="email" autoComplete="email" className="w-full border-b border-line bg-transparent pb-2 text-[14px] focus:border-ink focus:outline-none" />
+          </Field>
+          <Field label={t('sell.location')} error={errors.location}>
+            <input value={values.location} onChange={set('location')} type="text" placeholder={t('sell.locationPlaceholder')} className="w-full border-b border-line bg-transparent pb-2 text-[14px] placeholder:text-stone/60 focus:border-ink focus:outline-none" />
           </Field>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="Property type">
+            <Field label={t('sell.type')}>
               <select value={values.type} onChange={set('type')} className="w-full border-b border-line bg-transparent pb-2 text-[14px] focus:border-ink focus:outline-none">
-                {TYPES.map((t) => <option key={t}>{t}</option>)}
+                {TYPES.map((type) => <option key={type} value={type}>{typeLabel(type, lang)}</option>)}
               </select>
             </Field>
-            <Field label="Approximate size" error={errors.size}>
-              <input value={values.size} onChange={set('size')} type="text" inputMode="numeric" placeholder="e.g. 145 m²" className="w-full border-b border-line bg-transparent pb-2 text-[14px] placeholder:text-stone/60 focus:border-ink focus:outline-none" />
+            <Field label={t('sell.size')} error={errors.size}>
+              <input value={values.size} onChange={set('size')} type="text" inputMode="numeric" placeholder={t('sell.sizePlaceholder')} className="w-full border-b border-line bg-transparent pb-2 text-[14px] placeholder:text-stone/60 focus:border-ink focus:outline-none" />
             </Field>
           </div>
-          <Field label="Message (optional)">
+          <Field label={t('sell.message')}>
             <textarea value={values.message} onChange={set('message')} rows={3} className="w-full border-b border-line bg-transparent pb-2 text-[14px] focus:border-ink focus:outline-none" />
           </Field>
-          <button type="submit" className="mt-4 w-full bg-ink py-4 text-[12px] tracking-[0.25em] text-ivory transition-opacity hover:opacity-85">
-            SEND VIA WHATSAPP
+          <button type="submit" disabled={sending} className="mt-4 w-full bg-ink py-4 text-[12px] tracking-[0.25em] text-ivory transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60">
+            {sending ? t('sell.sending') : t('sell.send')}
           </button>
           <p className="text-[11px] leading-relaxed text-stone">
-            This opens WhatsApp with your message pre-filled. NARA has not yet received or evaluated your property.
+            {t('sell.note')}
           </p>
         </form>
       </div>

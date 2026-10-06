@@ -2,16 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { prefersReduced } from '../lib/motion'
+import { useI18n } from '../i18n'
 
 gsap.registerPlugin(ScrollTrigger)
-
-const PARAGRAPH =
-  "NARA focuses on considered presentation, clear information and direct communication. Every home we represent is seen, described honestly and priced with intent — so the right buyer recognises it, and the wrong one doesn't waste a viewing."
 
 export default function About() {
   const reduced = useState(() => prefersReduced())[0]
   const sectionRef = useRef(null)
   const wordsRef = useRef(null)
+  const { t, lang } = useI18n()
+  const paragraph = t('about.body')
 
   useEffect(() => {
     if (reduced) return
@@ -35,27 +35,29 @@ export default function About() {
       )
     }, sectionRef)
     return () => ctx.revert()
-  }, [reduced])
+    // The word count (and therefore the pinned scroll distance) is derived
+    // from the paragraph, so the trigger is rebuilt when the language changes.
+  }, [reduced, lang])
 
   return (
     <section ref={sectionRef} id="about" className="mx-auto max-w-3xl px-5 py-24 text-center md:px-8">
-      <p className="text-[11px] tracking-[0.4em] text-stone">APPROACH</p>
+      <p className="text-[11px] tracking-[0.4em] text-stone">{t('about.eyebrow')}</p>
       <h2 className="mt-4 font-serif text-3xl leading-snug md:text-[2.6rem]">
-        Property should be presented with clarity.
+        {t('about.title')}
       </h2>
       <p className="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-ink-soft">
-        <span className="sr-only">{PARAGRAPH}</span>
+        <span className="sr-only">{paragraph}</span>
         <span ref={wordsRef} aria-hidden="true">
           {reduced
-            ? PARAGRAPH
-            : PARAGRAPH.split(' ').flatMap((word, i) =>
+            ? paragraph
+            : paragraph.split(' ').flatMap((word, i) =>
                 i === 0
                   ? [<span key={i} data-word className="inline-block">{word}</span>]
                   : [' ', <span key={i} data-word className="inline-block">{word}</span>],
               )}
         </span>
       </p>
-      <p className="mt-10 text-[12px] tracking-[0.3em] text-stone">BEIRUT · LEBANON</p>
+      <p className="mt-10 text-[12px] tracking-[0.3em] text-stone">{t('about.place')}</p>
     </section>
   )
 }
