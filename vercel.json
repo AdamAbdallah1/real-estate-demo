@@ -1,5 +1,10 @@
 {
+  "redirects": [
+    { "source": "/ar/demo/nara-realestate/:path*", "destination": "/demo/nara-realestate/ar/:path*", "permanent": false }
+  ],
   "rewrites": [
+    { "source": "/demo/nara-realestate", "destination": "/demo/nara-realestate/index.html" },
+    { "source": "/demo/nara-realestate/(.*)", "destination": "/demo/nara-realestate/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

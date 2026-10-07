@@ -29,18 +29,29 @@ gsap.registerPlugin(ScrollTrigger)
 
 const DEFAULT_FILTERS = { purpose: 'buy', region: 'any', type: 'any', beds: 'Any', price: 'Any' }
 
+/**
+ * The address bar carries exactly one piece of state: the property deep link
+ * (`?property=p1`). Filters (Buy/Rent, location, type, bedrooms, price),
+ * sorting and the search term live in React state and are mirrored to
+ * localStorage (`nara:filters`) — never to the URL. Anything else found in the
+ * query string, including legacy `?purpose=buy` links, is discarded so the URL
+ * is cleaned up on load.
+ */
 function readUrlState() {
   const params = new URLSearchParams(window.location.search)
-  const filters = { ...DEFAULT_FILTERS }
-  if (params.has('purpose')) filters.purpose = params.get('purpose')
-  if (params.has('region')) filters.region = params.get('region')
-  if (params.has('type')) filters.type = params.get('type')
-  if (params.has('beds')) filters.beds = params.get('beds')
-  if (params.has('price')) filters.price = params.get('price')
+  const stored = readStorage('nara:filters', null) || {}
+  const saved = stored.filters || {}
+  const filters = {
+    purpose: saved.purpose || DEFAULT_FILTERS.purpose,
+    region: saved.region || DEFAULT_FILTERS.region,
+    type: saved.type || DEFAULT_FILTERS.type,
+    beds: saved.beds || DEFAULT_FILTERS.beds,
+    price: saved.price || DEFAULT_FILTERS.price,
+  }
   return {
     filters,
-    sort: params.get('sort') || 'recommended',
-    q: params.get('q') || '',
+    sort: stored.sort || 'recommended',
+    q: stored.q || '',
     propertyId: params.get('property') || null,
   }
 }
@@ -74,31 +85,23 @@ export default function App() {
   useEffect(() => { writeStorage('nara:recent', recentIds) }, [recentIds])
   useEffect(() => { writeStorage('nara:compare', compareIds) }, [compareIds])
 
-  // Persist browsing context + keep URL search params in sync
+  // Persist browsing context in localStorage and keep the URL to exactly one
+  // optional query parameter. Filters are deliberately NOT mirrored into the
+  // address bar: Buy/Rent, location, type, bedrooms, price, sort and search
+  // stay in application state, and this also wipes them from legacy URLs the
+  // moment the app loads.
   useEffect(() => {
     writeStorage('nara:filters', { filters, sort, q })
-    const params = new URLSearchParams()
-    if (filters.purpose !== 'any') params.set('purpose', filters.purpose)
-    if (filters.region !== 'any') params.set('region', filters.region)
-    if (filters.type !== 'any') params.set('type', filters.type)
-    if (filters.beds !== 'Any') params.set('beds', filters.beds)
-    if (filters.price !== 'Any') params.set('price', filters.price)
-    if (sort !== 'recommended') params.set('sort', sort)
-    if (q) params.set('q', q)
-    if (selectedId) params.set('property', selectedId)
-    const search = params.toString()
+    const search = selectedId ? `?property=${encodeURIComponent(selectedId)}` : ''
     // Preserve any history state installed by the router (React Router reads it
     // back on popstate) — only the URL query changes here.
-    window.history.replaceState(window.history.state, '', search ? `?${search}` : window.location.pathname)
+    window.history.replaceState(window.history.state, '', search || window.location.pathname)
   }, [filters, sort, q, selectedId])
 
   useEffect(() => {
     const onPop = () => {
-      const s = readUrlState()
-      setFilters(s.filters)
-      setSort(s.sort)
-      setQ(s.q)
-      setSelectedId(s.propertyId)
+      // Only the property deep link is URL-driven; filters stay in memory.
+      setSelectedId(readUrlState().propertyId)
       pushedRef.current = false
     }
     window.addEventListener('popstate', onPop)
@@ -157,9 +160,8 @@ export default function App() {
     setRecentIds((ids) => [p.id, ...ids.filter((id) => id !== p.id)].slice(0, 5))
     setSelectedId(p.id)
     setSavedOpen(false)
-    const params = new URLSearchParams(window.location.search)
-    params.set('property', p.id)
-    window.history.pushState(window.history.state, '', `?${params.toString()}`)
+    // `?property=<id>` is the only query parameter the public site ever writes.
+    window.history.pushState(window.history.state, '', `?property=${encodeURIComponent(p.id)}`)
     pushedRef.current = true
     window.scrollTo(0, 0)
   }, [])

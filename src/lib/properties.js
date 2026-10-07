@@ -143,9 +143,10 @@ export function matchesQuery(p, q) {
 }
 
 /**
- * Canonical property URL for the current language.
- * English  https://host/?property=p1
- * Arabic   https://host/ar?property=p1
+ * Canonical property URL for the current language (query-param deep links are
+ * language-independent, so the path and the id survive a language switch):
+ * English  https://host/demo/nara-realestate/?property=p1
+ * Arabic   https://host/demo/nara-realestate/ar/?property=p1
  */
 export function propertyUrl(p) {
   const url = new URL(window.location.href)

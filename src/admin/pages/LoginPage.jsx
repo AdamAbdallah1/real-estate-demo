@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { SITE_HOME } from '../../lib/basePath'
 import { Button, Field, Input } from '../components/ui'
 
 /**
- * /admin/login — NARA-branded, minimal, accessible.
+ * /admin-login — NARA-branded, minimal, accessible.
  * Error copy is deliberately generic: no Firebase internals are exposed.
  */
 export default function LoginPage() {
@@ -80,7 +81,7 @@ export default function LoginPage() {
           Access is limited to active NARA staff accounts.
         </p>
         <p className="mt-4 text-center text-[11px] text-stone">
-          <a href="/" className="underline underline-offset-4 hover:text-ink">Back to the website</a>
+          <a href={SITE_HOME} className="underline underline-offset-4 hover:text-ink">Back to the website</a>
         </p>
       </div>
     </main>

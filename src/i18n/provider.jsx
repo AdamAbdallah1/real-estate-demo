@@ -5,13 +5,16 @@
  * (`t('nav.buy')`) or a resolved content value (`geo(p.city, lang)`). Direction
  * and `lang` are applied to <html> exactly once by the provider.
  *
- * The provider lives inside <BrowserRouter> so the Arabic URL prefix (/ar) and
- * the language are kept in step without a reload, which also means switching
- * language never loses the current property, filters or scroll state.
+ * The provider lives inside <BrowserRouter>, whose basename is the deployment
+ * base (see lib/basePath.js), so the Arabic URL segment (/ar, which sits
+ * *after* that base) and the language are kept in step without a reload —
+ * which also means switching language never loses the current property,
+ * filters or scroll state.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { I18nContext } from './context.js'
+import { SITE_BASE, SITE_HOME, isAdminPath } from '../lib/basePath.js'
 import {
   DEFAULT_LOCALE,
   countLabel,
@@ -37,13 +40,17 @@ import {
 export function I18nProvider({ children }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const isAdmin = location.pathname.startsWith('/admin')
+  // The CMS shares the demo base but not the language namespace: `/admin*`
+  // and `/admin-login` never grow an `/ar` segment.
+  const isAdmin = isAdminPath(location.pathname)
 
-  // An explicit /ar deep link always wins; otherwise the stored preference
-  // decides until the user toggles. Default is English.
+  // The URL is the single source of truth for the public site: the deployment
+  // root is always English and `/ar` is always Arabic, and neither redirects to
+  // the other — a stored preference never overrides an explicit URL, so
+  // `/demo/nara-realestate/` always loads English. Only the admin, which has no
+  // language segment in its URL, still falls back to the stored preference.
   const [lang, setLangState] = useState(() => {
-    const fromPath = localeFromPath(location.pathname)
-    if (fromPath === 'ar') return 'ar'
+    if (!isAdmin) return localeFromPath(location.pathname)
     return readStoredLocale() === 'ar' ? 'ar' : DEFAULT_LOCALE
   })
 
@@ -57,25 +64,43 @@ export function I18nProvider({ children }) {
   }, [lang, isAdmin])
 
   // Public routes mirror the language in the path (replace → no history noise,
-  // so Back never walks through language states).
+  // so Back never walks through language states). The path is NARA-local — the
+  // router's basename supplies the deployment base — and only ever touches
+  // NARA's own /ar segment. Search and hash are read from the live URL so
+  // switching language can never drop `?property=`.
   useEffect(() => {
     if (isAdmin) return
     if (localeFromPath(location.pathname) === lang) return
     navigate(
       {
         pathname: pathForLocale(lang, location.pathname),
-        search: location.search,
-        hash: location.hash,
+        search: window.location.search,
+        hash: window.location.hash,
       },
       { replace: true },
     )
-  }, [lang, isAdmin, location.pathname, location.search, location.hash, navigate])
+  }, [lang, isAdmin, location.pathname, navigate])
 
   const setLang = useCallback((next) => {
     const value = next === 'ar' ? 'ar' : DEFAULT_LOCALE
     setLocale(value)
     setLangState(value)
   }, [])
+
+  // react-router joins a non-root `basename` with `/` as the bare basename
+  // (`/demo/nara-realestate`), so coming back to English would drop the
+  // canonical trailing slash of the root. Keep one shape for
+  // `/demo/nara-realestate/` — the host, hreflang alternates and copied links
+  // all agree on it — without notifying the router.
+  useEffect(() => {
+    if (isAdmin || !SITE_BASE) return
+    if (window.location.pathname !== SITE_BASE) return
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${SITE_HOME}${window.location.search}${window.location.hash}`,
+    )
+  }, [isAdmin, location])
 
   const value = useMemo(() => {
     const t = (key, vars) => translate(lang, key, vars)

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider } from '../context/AuthContext'
 import { useAuth } from '../hooks/useAuth'
+import { SITE_HOME } from '../lib/basePath'
 import AdminLayout, { AccessDenied, FullScreenStatus } from './AdminLayout'
 import LoginPage from './pages/LoginPage'
 import OverviewPage from './pages/OverviewPage'
@@ -27,7 +28,8 @@ function Protected() {
     return <FullScreenStatus label="CHECKING ACCESS…" />
   }
   if (status === 'unauthenticated') {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />
+    // Router path: the address bar shows `/demo/nara-realestate/admin-login`.
+    return <Navigate to="/admin-login" state={{ from: location }} replace />
   }
   if (status === 'signedIn') {
     return <AccessDenied onLogout={logout} error={error} />
@@ -42,9 +44,22 @@ function NotFound() {
       <PageHeader title="Page not found" subtitle="That CMS address does not exist." />
       <div className="flex gap-3">
         <Button variant="primary" onClick={() => navigate('/admin')}>BACK TO OVERVIEW</Button>
-        <a href="/" className="inline-flex items-center border border-line px-4 py-2.5 text-[11px] tracking-[0.18em] text-ink hover:border-ink">BACK TO SITE</a>
+        <a href={SITE_HOME} className="inline-flex items-center border border-line px-4 py-2.5 text-[11px] tracking-[0.18em] text-ink hover:border-ink">BACK TO SITE</a>
       </div>
     </div>
+  )
+}
+
+/**
+ * `/admin-login` — the single sign-in screen, mounted on its own route so the
+ * CMS has exactly one login URL (`/demo/nara-realestate/admin-login`) and no
+ * `login` page hiding inside the protected namespace.
+ */
+export function AdminLoginPage() {
+  return (
+    <AuthProvider>
+      <LoginPage />
+    </AuthProvider>
   )
 }
 
@@ -53,7 +68,6 @@ export default function AdminApp() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="login" element={<LoginPage />} />
         <Route element={<Protected />}>
           <Route index element={<OverviewPage />} />
           <Route path="properties" element={<PropertiesPage />} />

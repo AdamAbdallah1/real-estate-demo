@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { ROLE_LABELS } from '../lib/firestore/admins'
+import { SITE_HOME } from '../lib/basePath'
 import { Button } from './components/ui'
 import { cx } from './lib/cx'
 
@@ -51,7 +52,7 @@ function Identity({ onLogout }) {
       <p className="truncate text-[13px] text-ink" title={user?.email || ''}>{label}</p>
       <p className="mt-0.5 text-[11px] tracking-wide text-stone">{role}</p>
       <div className="mt-3 flex items-center gap-4">
-        <a href="/" className="text-[11px] tracking-[0.14em] text-stone underline underline-offset-4 hover:text-ink">VIEW SITE</a>
+        <a href={SITE_HOME} className="text-[11px] tracking-[0.14em] text-stone underline underline-offset-4 hover:text-ink">VIEW SITE</a>
         <button type="button" onClick={onLogout} className="text-[11px] tracking-[0.14em] text-stone underline underline-offset-4 hover:text-ink">LOG OUT</button>
       </div>
     </div>
@@ -72,7 +73,7 @@ export default function AdminLayout() {
 
   const handleLogout = async () => {
     await logout()
-    navigate('/admin/login', { replace: true })
+    navigate('/admin-login', { replace: true })
   }
 
   return (
@@ -149,7 +150,7 @@ export function AccessDenied({ onLogout, error }) {
       </p>
       <div className="mt-8 flex gap-4">
         <Button onClick={onLogout}>LOG OUT</Button>
-        <a href="/" className="inline-flex items-center border border-line px-4 py-2.5 text-[11px] tracking-[0.18em] text-ink hover:border-ink">BACK TO SITE</a>
+        <a href={SITE_HOME} className="inline-flex items-center border border-line px-4 py-2.5 text-[11px] tracking-[0.18em] text-ink hover:border-ink">BACK TO SITE</a>
       </div>
     </main>
   )

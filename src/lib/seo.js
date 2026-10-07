@@ -3,7 +3,8 @@
  * tags, plus JSON-LD structured data for property pages.
  * All values come from real CMS content — nothing here is invented.
  */
-import { getLocale } from '../i18n/locale.js'
+import { withSiteBase } from './basePath.js'
+import { getLocale, pathForLocale } from '../i18n/locale.js'
 
 function upsertMeta(selector, attributes) {
   let tag = document.head.querySelector(selector)
@@ -98,16 +99,18 @@ function upsertHreflang(hreflang, href) {
 
 /**
  * Language alternates for the current document.
- * English lives at /, Arabic at /ar — both keep the same query string, so a
- * property deep link has a valid alternate in each language.
+ * English lives at the deployment root, Arabic one `/ar` segment below it —
+ * both under the Vite base path (`/demo/nara-realestate[/ar]`) — and both keep
+ * the same query string, so a property deep link has a valid alternate in each
+ * language. `pathForLocale` is the single source of truth for that mapping
+ * (NARA-local), and `withSiteBase` puts the deployment base back in front so
+ * the emitted href is a real address-bar URL.
  */
 export function applyLanguageAlternates(pathname = window.location.pathname) {
   const origin = window.location.origin
   const search = window.location.search
-  const path = String(pathname || '/')
-  const stripped = path === '/ar' ? '/' : path.startsWith('/ar/') ? path.slice(3) : path
-  const enUrl = `${origin}${stripped}${search}`
-  const arUrl = `${origin}${stripped === '/' ? '/ar' : `/ar${stripped}`}${search}`
+  const enUrl = `${origin}${withSiteBase(pathForLocale('en', pathname))}${search}`
+  const arUrl = `${origin}${withSiteBase(pathForLocale('ar', pathname))}${search}`
 
   upsertHreflang('en', enUrl)
   upsertHreflang('ar', arUrl)

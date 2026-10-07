@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useSettingsForm } from '../hooks/useSettingsForm'
 import { useSubscription } from '../hooks/useSubscription'
 import { subscribeAdminProperties } from '../../lib/firestore/properties'
@@ -7,6 +6,7 @@ import { formatMoney } from '../lib/format'
 import { Button, ErrorState, Field, Input, LoadingRows, PageHeader, Select } from '../components/ui'
 import BilingualField from '../components/BilingualField'
 import { both, geoTxt, sideOf, txt } from '../lib/i18n'
+import { SITE_HOME } from '../../lib/basePath'
 import { cx } from '../lib/cx'
 
 const asItems = (cb) => subscribeAdminProperties(({ properties, error }) => cb({ items: properties || [], error }))
@@ -51,12 +51,15 @@ export default function ContentPage() {
       </p>
     ) : null
 
+  // `SITE_HOME` is an absolute browser path (it already carries the
+  // deployment base), so "open the website" is a plain anchor: a router
+  // <Link> would prepend the base a second time.
   return (
     <div className="space-y-10">
       <PageHeader
         title="Site content"
         subtitle="Copy and selections the public homepage reads from Firestore."
-        actions={<Link to="/"><Button>OPEN THE WEBSITE</Button></Link>}
+        actions={<a href={SITE_HOME}><Button>OPEN THE WEBSITE</Button></a>}
       />
 
       {/* HOMEPAGE */}
